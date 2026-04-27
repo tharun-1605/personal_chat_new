@@ -1,0 +1,48 @@
+name: personal_chat
+description: "A secure personal chat application with Firebase backend and end-to-end encryption."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  
+  # Firebase
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.2
+  cloud_firestore: ^5.6.6
+  firebase_storage: ^12.4.4
+  
+  # State Management
+  provider: ^6.1.2
+  
+  # Utilities
+  uuid: ^4.5.1
+  intl: ^0.20.2
+  
+  # Security & Encryption
+  encrypt: ^5.0.3
+  flutter_secure_storage: ^9.2.4
+  crypto: ^3.0.6
+  
+  # UI & Images
+  cached_network_image: ^3.4.1
+  image_picker: ^1.1.2
+  shimmer: ^3.0.0
+  
+  # Shared Preferences
+  shared_preferences: ^2.3.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
