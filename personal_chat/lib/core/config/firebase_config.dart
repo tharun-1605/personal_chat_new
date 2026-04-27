@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 class FirebaseConfig {
-  static FirebaseAuth? _auth;
+  static firebase_auth.FirebaseAuth? _auth;
   static FirebaseFirestore? _firestore;
   static FirebaseStorage? _storage;
 
@@ -21,7 +21,7 @@ class FirebaseConfig {
     );
   }
 
-  static FirebaseAuth get auth {
+  static firebase_auth.FirebaseAuth get auth {
     if (_auth == null) {
       throw Exception(
         'Firebase not initialized. Call FirebaseConfig.initialize() first.',
@@ -48,7 +48,8 @@ class FirebaseConfig {
     return _storage!;
   }
 
-  static User? get currentUser => _auth?.currentUser;
+  static firebase_auth.User? get currentUser => _auth?.currentUser;
 
-  static Stream<User?> get authStateChanges => _auth!.authStateChanges();
+  static Stream<firebase_auth.User?> get authStateChanges =>
+      _auth!.authStateChanges();
 }

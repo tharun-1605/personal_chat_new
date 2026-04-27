@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -108,8 +109,31 @@ class AuthProvider extends ChangeNotifier {
       await _encryptionService.initialize(user.id);
       notifyListeners();
       return true;
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found':
+          _errorMessage = 'No account found for this email';
+          break;
+        case 'wrong-password':
+          _errorMessage = 'Incorrect password';
+          break;
+        case 'invalid-email':
+          _errorMessage = 'Invalid email format';
+          break;
+        case 'user-disabled':
+          _errorMessage = 'This account has been disabled';
+          break;
+        case 'invalid-credential':
+          _errorMessage = 'Email or password is incorrect';
+          break;
+        default:
+          _errorMessage = e.message ?? 'Authentication failed';
+      }
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
     } catch (e) {
-      _errorMessage = 'Invalid email or password';
+      _errorMessage = 'An unexpected error occurred';
       _status = AuthStatus.error;
       notifyListeners();
       return false;
