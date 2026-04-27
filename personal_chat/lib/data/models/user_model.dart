@@ -44,6 +44,7 @@ class UserModel {
       'id': id,
       'userId': userId,
       'username': username,
+      'usernameLowercase': username.toLowerCase(),
       'email': email,
       'photoUrl': photoUrl,
       'bio': bio,

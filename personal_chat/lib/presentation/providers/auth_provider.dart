@@ -55,24 +55,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Check if email is taken
-      final isEmailTaken = await _authRepository.isEmailTaken(email);
-      if (isEmailTaken) {
-        _errorMessage = 'This email is already registered';
-        _status = AuthStatus.error;
-        notifyListeners();
-        return false;
-      }
-
-      // Check if username is taken
-      final isUsernameTaken = await _authRepository.isUsernameTaken(username);
-      if (isUsernameTaken) {
-        _errorMessage = 'This username is already taken';
-        _status = AuthStatus.error;
-        notifyListeners();
-        return false;
-      }
-
       // Register user
       final user = await _authRepository.register(
         username: username,
@@ -85,6 +67,32 @@ class AuthProvider extends ChangeNotifier {
       await _encryptionService.initialize(user.id);
       notifyListeners();
       return true;
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'email-already-in-use':
+          _errorMessage = 'This email is already registered';
+          break;
+        case 'invalid-email':
+          _errorMessage = 'Invalid email format';
+          break;
+        case 'weak-password':
+          _errorMessage = 'Password is too weak';
+          break;
+        default:
+          _errorMessage = e.message ?? 'Registration failed';
+      }
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        _errorMessage = 'Database access denied. Check Firestore rules.';
+      } else {
+        _errorMessage = e.message ?? 'Registration failed';
+      }
+      _status = AuthStatus.error;
+      notifyListeners();
+      return false;
     } catch (e) {
       _errorMessage = e.toString();
       _status = AuthStatus.error;

@@ -63,16 +63,22 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Stream<List<MessageModel>> getMessagesStream(String chatId) {
-    return _chatRepository.getMessagesStream(chatId);
+  Stream<List<MessageModel>> getMessagesStream(
+    String chatId,
+    String currentUserId,
+  ) {
+    return _chatRepository.getMessagesStream(chatId, currentUserId);
   }
 
-  Future<void> loadMessages(String chatId) async {
+  Future<void> loadMessages(String chatId, String currentUserId) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      _messages = await _chatRepository.getMessages(chatId);
+      _messages = await _chatRepository.getMessages(
+        chatId,
+        currentUserId: currentUserId,
+      );
       _isLoading = false;
       notifyListeners();
     } catch (e) {

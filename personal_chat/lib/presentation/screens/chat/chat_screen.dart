@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/chat_model.dart';
-import '../../../data/models/message_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 
@@ -19,7 +18,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  bool _isTyping = false;
 
   @override
   void initState() {
@@ -29,8 +27,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _loadMessages() {
     final chatProvider = context.read<ChatProvider>();
+    final currentUser = context.read<AuthProvider>().currentUser;
     chatProvider.setCurrentChat(widget.chat);
-    chatProvider.loadMessages(widget.chat.id);
+    if (currentUser != null) {
+      chatProvider.loadMessages(widget.chat.id, currentUser.id);
+    }
   }
 
   @override
@@ -156,61 +157,96 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final messages = chatProvider.messages;
-
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 60,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No messages yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Send a message to start the conversation',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
+                if (currentUser == null) {
+                  return const Center(child: Text('Please log in again'));
                 }
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                return StreamBuilder(
+                  stream: chatProvider.getMessagesStream(
+                    widget.chat.id,
+                    currentUser.id,
                   ),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == currentUser?.id;
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            'Unable to load messages',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ),
+                      );
+                    }
 
-                    // Decrypt message
-                    final decryptedContent = chatProvider.decryptMessage(
-                      message,
-                      currentUser?.id ?? '',
-                    );
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                    return _MessageBubble(
-                      message: decryptedContent,
-                      isMe: isMe,
-                      time: message.timestamp,
-                      isRead: message.isRead,
+                    final messages = snapshot.data!;
+
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              size: 60,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No messages yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Send a message to start the conversation',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_scrollController.hasClients) {
+                        _scrollController.jumpTo(
+                          _scrollController.position.maxScrollExtent,
+                        );
+                      }
+                    });
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isMe = message.senderId == currentUser.id;
+
+                        final decryptedContent = chatProvider.decryptMessage(
+                          message,
+                          currentUser.id,
+                        );
+
+                        return _MessageBubble(
+                          message: decryptedContent,
+                          isMe: isMe,
+                          time: message.timestamp,
+                          isRead: message.isRead,
+                        );
+                      },
                     );
                   },
                 );

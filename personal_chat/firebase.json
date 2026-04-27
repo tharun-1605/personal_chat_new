@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"personal-chat-d93e4","appId":"1:412664449428:android:e795076d94a567d7352781","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"personal-chat-d93e4","configurations":{"android":"1:412664449428:android:e795076d94a567d7352781","ios":"1:412664449428:ios:e5e8f37d262284c6352781"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "personal-chat-d93e4",
+          "appId": "1:412664449428:android:e795076d94a567d7352781",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "personal-chat-d93e4",
+          "configurations": {
+            "android": "1:412664449428:android:e795076d94a567d7352781",
+            "ios": "1:412664449428:ios:e5e8f37d262284c6352781"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

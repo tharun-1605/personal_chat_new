@@ -3,6 +3,7 @@ class MessageModel {
   final String chatId;
   final String senderId;
   final String receiverId;
+  final List<String> participantIds;
   final String content; // Encrypted content
   final DateTime timestamp;
   final bool isRead;
@@ -13,6 +14,7 @@ class MessageModel {
     required this.chatId,
     required this.senderId,
     required this.receiverId,
+    required this.participantIds,
     required this.content,
     required this.timestamp,
     this.isRead = false,
@@ -25,6 +27,7 @@ class MessageModel {
       chatId: map['chatId'] ?? '',
       senderId: map['senderId'] ?? '',
       receiverId: map['receiverId'] ?? '',
+      participantIds: List<String>.from(map['participantIds'] ?? const []),
       content: map['content'] ?? '',
       timestamp: map['timestamp'] != null
           ? DateTime.parse(map['timestamp'])
@@ -40,6 +43,7 @@ class MessageModel {
       'chatId': chatId,
       'senderId': senderId,
       'receiverId': receiverId,
+      'participantIds': participantIds,
       'content': content,
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
@@ -52,6 +56,7 @@ class MessageModel {
     String? chatId,
     String? senderId,
     String? receiverId,
+    List<String>? participantIds,
     String? content,
     DateTime? timestamp,
     bool? isRead,
@@ -62,6 +67,7 @@ class MessageModel {
       chatId: chatId ?? this.chatId,
       senderId: senderId ?? this.senderId,
       receiverId: receiverId ?? this.receiverId,
+      participantIds: participantIds ?? this.participantIds,
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,

@@ -96,6 +96,7 @@ class UserProvider extends ChangeNotifier {
   void clearSearch() {
     _searchResults = [];
     _selectedUser = null;
+    _errorMessage = null;
     notifyListeners();
   }
 }

@@ -43,11 +43,12 @@ class UserRepository {
       return byUserId.docs.map((doc) => UserModel.fromMap(doc.data())).toList();
     }
 
-    // Search by username
+    // Search by username (case-insensitive via lowercase field)
+    final lowerQuery = query.toLowerCase();
     final byUsername = await _firestore
         .collection(AppConstants.usersCollection)
-        .where('username', isGreaterThanOrEqualTo: query)
-        .where('username', isLessThanOrEqualTo: '$query\uf8ff')
+        .where('usernameLowercase', isGreaterThanOrEqualTo: lowerQuery)
+        .where('usernameLowercase', isLessThanOrEqualTo: '$lowerQuery\uf8ff')
         .limit(AppConstants.searchResultsLimit)
         .get();
 

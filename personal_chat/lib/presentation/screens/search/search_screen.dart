@@ -98,6 +98,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                if (userProvider.errorMessage != null) {
+                  return _buildError(userProvider.errorMessage!);
+                }
+
                 if (_searchController.text.isEmpty) {
                   return _buildInitialState();
                 }
@@ -181,6 +185,44 @@ class _SearchScreenState extends State<SearchScreen> {
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 60, color: AppTheme.errorColor),
+            const SizedBox(height: 16),
+            Text(
+              'Search Error',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                context.read<UserProvider>().clearSearch();
+                _search(_searchController.text);
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
       ),
     );
   }

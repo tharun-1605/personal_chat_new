@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: check if the requesting user owns this document
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper: check if user is listed on a participantIds array
+    function isParticipant(participantIds) {
+      return isAuthenticated()
+        && participantIds is list
+        && request.auth.uid in participantIds;
+    }
+
+    // Backward compatibility for old chat docs created before participantIds.
+    function isLegacyChatParticipant(chatId) {
+      return isAuthenticated() && chatId.matches('.*' + request.auth.uid + '.*');
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (needed for search)
+      allow read: if isAuthenticated();
+
+      // Users can only create/update their own profile
+      allow create: if isOwner(userId)
+        && request.resource.data.id == userId
+        && request.resource.data.keys().hasAll(['id', 'userId', 'username', 'email', 'createdAt', 'lastSeen', 'isOnline']);
+
+      allow update: if isOwner(userId)
+        && request.resource.data.id == resource.data.id;
+    }
+
+    // Chats collection
+    // Chat ID format: "{uid1}_{uid2}" where uids are sorted alphabetically
+    match /chats/{chatId} {
+      // Only participants can read their chats
+      allow read: if isParticipant(resource.data.participantIds)
+        || isLegacyChatParticipant(chatId);
+
+      // Only participants can create/update chats
+      allow create: if isParticipant(request.resource.data.participantIds)
+        && request.resource.data.id == chatId
+        && request.resource.data.participantIds.size() == 2;
+
+      allow update: if (
+          isParticipant(resource.data.participantIds)
+          && request.resource.data.participantIds == resource.data.participantIds
+        ) || (
+          isLegacyChatParticipant(chatId)
+          && isParticipant(request.resource.data.participantIds)
+          && request.resource.data.participantIds.size() == 2
+        );
+
+      // Only participants can delete
+      allow delete: if isParticipant(resource.data.participantIds)
+        || isLegacyChatParticipant(chatId);
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      // Sender or receiver can read messages
+      allow read: if isParticipant(resource.data.participantIds);
+
+      // Only sender can create messages
+      allow create: if isAuthenticated()
+        && request.auth.uid == request.resource.data.senderId
+        && request.resource.data.senderId in request.resource.data.participantIds
+        && request.resource.data.receiverId in request.resource.data.participantIds
+        && request.resource.data.keys().hasAll(['id', 'chatId', 'senderId', 'receiverId', 'participantIds', 'content', 'timestamp']);
+
+      // Only sender or receiver can update (e.g., mark as read)
+      allow update: if isParticipant(resource.data.participantIds)
+        && request.resource.data.participantIds == resource.data.participantIds;
+
+      // Only sender can delete their own messages
+      allow delete: if isAuthenticated()
+        && request.auth.uid == resource.data.senderId;
+    }
+
+    // Contacts collection (if used in future)
+    match /contacts/{contactId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

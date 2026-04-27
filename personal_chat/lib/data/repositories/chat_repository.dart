@@ -22,6 +22,7 @@ class ChatRepository {
     UserModel participant,
   ) async {
     final chatId = _generateChatId(currentUserId, participant.id);
+    final participantIds = [currentUserId, participant.id]..sort();
 
     final chatDoc = await _firestore
         .collection(AppConstants.chatsCollection)
@@ -29,13 +30,20 @@ class ChatRepository {
         .get();
 
     if (chatDoc.exists) {
-      return ChatModel.fromMap(chatDoc.data()!, participant: participant);
+      final chatData = chatDoc.data()!;
+      chatData['participantId'] = participant.id;
+      if (chatData['participantIds'] == null) {
+        await chatDoc.reference.update({'participantIds': participantIds});
+        chatData['participantIds'] = participantIds;
+      }
+      return ChatModel.fromMap(chatData, participant: participant);
     }
 
     // Create new chat
     final newChat = {
       'id': chatId,
       'participantId': participant.id,
+      'participantIds': participantIds,
       'lastMessage': '',
       'lastMessageTime': DateTime.now().toIso8601String(),
       'unreadCount': 0,
@@ -52,6 +60,7 @@ class ChatRepository {
   Future<List<ChatModel>> getChats(String currentUserId) async {
     final chatsSnapshot = await _firestore
         .collection(AppConstants.chatsCollection)
+        .where('participantIds', arrayContains: currentUserId)
         .orderBy('lastMessageTime', descending: true)
         .get();
 
@@ -59,7 +68,15 @@ class ChatRepository {
 
     for (final chatDoc in chatsSnapshot.docs) {
       final chatData = chatDoc.data();
-      final participantId = chatData['participantId'];
+      final participantIds = List<String>.from(
+        chatData['participantIds'] ?? [],
+      );
+      final participantId = participantIds.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => chatData['participantId'] ?? '',
+      );
+
+      if (participantId.isEmpty) continue;
 
       // Get participant details
       final participantDoc = await _firestore
@@ -69,6 +86,7 @@ class ChatRepository {
 
       if (participantDoc.exists) {
         final participant = UserModel.fromMap(participantDoc.data()!);
+        chatData['participantId'] = participantId;
         chats.add(ChatModel.fromMap(chatData, participant: participant));
       }
     }
@@ -96,9 +114,14 @@ class ChatRepository {
       chatId: chatId,
       senderId: senderId,
       receiverId: receiverId,
+      participantIds: [senderId, receiverId]..sort(),
       content: encryptedContent,
       timestamp: DateTime.now(),
     );
+
+    final chatRef = _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId);
 
     // Save message
     await _firestore
@@ -107,19 +130,21 @@ class ChatRepository {
         .set(message.toMap());
 
     // Update chat with last message
-    await _firestore
-        .collection(AppConstants.chatsCollection)
-        .doc(chatId)
-        .update({
-          'lastMessage': content,
-          'lastMessageTime': DateTime.now().toIso8601String(),
-        });
+    await chatRef.update({
+      'lastMessage': content,
+      'lastMessageTime': DateTime.now().toIso8601String(),
+      'participantIds': [senderId, receiverId]..sort(),
+    });
   }
 
-  Stream<List<MessageModel>> getMessagesStream(String chatId) {
+  Stream<List<MessageModel>> getMessagesStream(
+    String chatId,
+    String currentUserId,
+  ) {
     return _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
+        .where('participantIds', arrayContains: currentUserId)
         .orderBy('timestamp', descending: false)
         .snapshots()
         .map((snapshot) {
@@ -131,11 +156,13 @@ class ChatRepository {
 
   Future<List<MessageModel>> getMessages(
     String chatId, {
+    required String currentUserId,
     int limit = 50,
   }) async {
     final messagesSnapshot = await _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
+        .where('participantIds', arrayContains: currentUserId)
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .get();
@@ -165,6 +192,7 @@ class ChatRepository {
     final messages = await _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
+        .where('participantIds', arrayContains: currentUserId)
         .where('receiverId', isEqualTo: currentUserId)
         .where('isRead', isEqualTo: false)
         .get();
