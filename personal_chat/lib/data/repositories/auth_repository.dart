@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/config/firebase_config.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/user_model.dart';
+import '../../core/services/notification_service.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseConfig.auth;
@@ -69,6 +70,7 @@ class AuthRepository {
       createdAt: DateTime.now(),
       lastSeen: DateTime.now(),
       isOnline: true,
+      fcmToken: await NotificationService().getToken(),
     );
 
     await _firestore
@@ -88,13 +90,15 @@ class AuthRepository {
       password: password,
     );
 
-    // Update last seen
+    // Update last seen and FCM token
+    final fcmToken = await NotificationService().getToken();
     await _firestore
         .collection(AppConstants.usersCollection)
         .doc(userCredential.user!.uid)
         .update({
           'lastSeen': DateTime.now().toIso8601String(),
           'isOnline': true,
+          if (fcmToken != null) 'fcmToken': fcmToken,
         });
 
     final userDoc = await _firestore

@@ -117,10 +117,11 @@ class ChatRepository {
     required String senderId,
     required String receiverId,
     required String content,
+    MessageType type = MessageType.text,
   }) async {
     final messageId = _uuid.v4();
 
-    // Encrypt the message
+    // Encrypt the message (even image URLs are encrypted for privacy)
     final encryptedContent = _encryptionService.encryptMessage(
       content,
       senderId,
@@ -135,6 +136,7 @@ class ChatRepository {
       participantIds: [senderId, receiverId]..sort(),
       content: encryptedContent,
       timestamp: DateTime.now(),
+      type: type,
     );
 
     final chatRef = _firestore
@@ -149,11 +151,12 @@ class ChatRepository {
 
     // Update chat with last message
     await chatRef.update({
-      'lastMessage': content,
+      'lastMessage': type == MessageType.image ? '📷 Image' : content,
       'lastMessageTime': DateTime.now().toIso8601String(),
       'participantIds': [senderId, receiverId]..sort(),
       'unreadCounts.$receiverId': FieldValue.increment(1),
       'unreadCounts.$senderId': 0,
+      'typingStatus.$senderId': false,
     });
   }
 
@@ -164,7 +167,8 @@ class ChatRepository {
     return _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
-        .orderBy('timestamp', descending: false)
+        .orderBy('timestamp', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -219,14 +223,20 @@ class ChatRepository {
         .where('isRead', isEqualTo: false)
         .get();
 
+    if (messages.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
     for (final doc in messages.docs) {
-      try {
-        await doc.reference.update({'isRead': true});
-      } catch (_) {
-        // Older message documents may not have participantIds; the chat-level
-        // unread count above is the source of truth for the inbox badge.
-      }
+      batch.update(doc.reference, {'isRead': true});
     }
+    await batch.commit();
+  }
+
+  Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({'typingStatus.$userId': isTyping});
   }
 
   Future<void> deleteChat(String chatId) async {

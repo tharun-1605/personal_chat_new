@@ -131,6 +131,14 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
+    try {
+      await _chatRepository.updateTypingStatus(chatId, userId, isTyping);
+    } catch (e) {
+      // Ignore typing status update errors silently to avoid spamming UI
+    }
+  }
+
   Future<void> deleteChat(String chatId) async {
     try {
       await _chatRepository.deleteChat(chatId);

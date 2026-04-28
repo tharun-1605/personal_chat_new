@@ -8,10 +8,12 @@ import 'presentation/providers/user_provider.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await FirebaseConfig.initialize();
+  await NotificationService().initialize();
   runApp(const MyApp());
 }
 

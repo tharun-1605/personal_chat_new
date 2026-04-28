@@ -8,6 +8,7 @@ class UserModel {
   final DateTime createdAt;
   final DateTime lastSeen;
   final bool isOnline;
+  final String? fcmToken;
 
   UserModel({
     required this.id,
@@ -19,6 +20,7 @@ class UserModel {
     required this.createdAt,
     required this.lastSeen,
     this.isOnline = false,
+    this.fcmToken,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
@@ -36,6 +38,7 @@ class UserModel {
           ? DateTime.parse(map['lastSeen'])
           : DateTime.now(),
       isOnline: map['isOnline'] ?? false,
+      fcmToken: map['fcmToken'],
     );
   }
 
@@ -51,6 +54,7 @@ class UserModel {
       'createdAt': createdAt.toIso8601String(),
       'lastSeen': lastSeen.toIso8601String(),
       'isOnline': isOnline,
+      'fcmToken': fcmToken,
     };
   }
 
@@ -64,6 +68,7 @@ class UserModel {
     DateTime? createdAt,
     DateTime? lastSeen,
     bool? isOnline,
+    String? fcmToken,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -75,6 +80,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       lastSeen: lastSeen ?? this.lastSeen,
       isOnline: isOnline ?? this.isOnline,
+      fcmToken: fcmToken ?? this.fcmToken,
     );
   }
 }
