@@ -8,6 +8,7 @@ class ChatModel {
   final String lastMessage;
   final DateTime lastMessageTime;
   final int unreadCount;
+  final Map<String, int> unreadCounts;
 
   ChatModel({
     required this.id,
@@ -17,12 +18,17 @@ class ChatModel {
     required this.lastMessage,
     required this.lastMessageTime,
     this.unreadCount = 0,
+    this.unreadCounts = const {},
   });
 
   factory ChatModel.fromMap(
     Map<String, dynamic> map, {
     UserModel? participant,
   }) {
+    final unreadCountsMap = Map<String, dynamic>.from(
+      map['unreadCounts'] ?? const {},
+    );
+
     return ChatModel(
       id: map['id'] ?? '',
       participantId: map['participantId'] ?? '',
@@ -33,6 +39,9 @@ class ChatModel {
           ? DateTime.parse(map['lastMessageTime'])
           : DateTime.now(),
       unreadCount: map['unreadCount'] ?? 0,
+      unreadCounts: unreadCountsMap.map(
+        (key, value) => MapEntry(key, value is int ? value : 0),
+      ),
     );
   }
 
@@ -44,6 +53,7 @@ class ChatModel {
       'lastMessage': lastMessage,
       'lastMessageTime': lastMessageTime.toIso8601String(),
       'unreadCount': unreadCount,
+      'unreadCounts': unreadCounts,
     };
   }
 
@@ -55,6 +65,7 @@ class ChatModel {
     String? lastMessage,
     DateTime? lastMessageTime,
     int? unreadCount,
+    Map<String, int>? unreadCounts,
   }) {
     return ChatModel(
       id: id ?? this.id,
@@ -64,6 +75,7 @@ class ChatModel {
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       unreadCount: unreadCount ?? this.unreadCount,
+      unreadCounts: unreadCounts ?? this.unreadCounts,
     );
   }
 }

@@ -30,6 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUser = context.read<AuthProvider>().currentUser;
     chatProvider.setCurrentChat(widget.chat);
     if (currentUser != null) {
+      chatProvider.markAsRead(widget.chat.id, currentUser.id);
       chatProvider.loadMessages(widget.chat.id, currentUser.id);
     }
   }

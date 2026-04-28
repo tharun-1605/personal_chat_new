@@ -40,21 +40,14 @@ class EncryptionService {
   }
 
   String encryptMessage(String plainText, String senderId, String receiverId) {
-    if (_encryptionKey == null) {
-      throw Exception('Encryption not initialized');
-    }
-
-    // Create IV from sender and receiver IDs
-    final ivString = '${senderId}_$receiverId';
-    final ivHash = sha256.convert(utf8.encode(ivString));
-    final ivBytes = ivHash.bytes.sublist(0, AppConstants.ivLength);
-    final iv = encrypt.IV(Uint8List.fromList(ivBytes));
-
     final encrypter = encrypt.Encrypter(
-      encrypt.AES(_encryptionKey!, mode: encrypt.AESMode.cbc),
+      encrypt.AES(_chatKey(senderId, receiverId), mode: encrypt.AESMode.cbc),
     );
 
-    final encrypted = encrypter.encrypt(plainText, iv: iv);
+    final encrypted = encrypter.encrypt(
+      plainText,
+      iv: _chatIv(senderId, receiverId),
+    );
     return encrypted.base64;
   }
 
@@ -63,28 +56,69 @@ class EncryptionService {
     String senderId,
     String receiverId,
   ) {
-    if (_encryptionKey == null) {
-      throw Exception('Encryption not initialized');
+    try {
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(_chatKey(senderId, receiverId), mode: encrypt.AESMode.cbc),
+      );
+
+      return encrypter.decrypt64(
+        encryptedText,
+        iv: _chatIv(senderId, receiverId),
+      );
+    } catch (_) {
+      return _decryptLegacyMessage(encryptedText, senderId, receiverId);
     }
-
-    // Create IV from sender and receiver IDs
-    final ivString = '${senderId}_$receiverId';
-    final ivHash = sha256.convert(utf8.encode(ivString));
-    final ivBytes = ivHash.bytes.sublist(0, AppConstants.ivLength);
-    final iv = encrypt.IV(Uint8List.fromList(ivBytes));
-
-    final encrypter = encrypt.Encrypter(
-      encrypt.AES(_encryptionKey!, mode: encrypt.AESMode.cbc),
-    );
-
-    final decrypted = encrypter.decrypt64(encryptedText, iv: iv);
-    return decrypted;
   }
 
   String generateChatKey(String userId1, String userId2) {
     // Sort user IDs to ensure consistent key generation
     final sortedIds = [userId1, userId2]..sort();
     return '${sortedIds[0]}_${sortedIds[1]}';
+  }
+
+  encrypt.Key _chatKey(String userId1, String userId2) {
+    final chatKey = generateChatKey(userId1, userId2);
+    final keyHash = sha256.convert(utf8.encode(chatKey));
+    return encrypt.Key(Uint8List.fromList(keyHash.bytes));
+  }
+
+  encrypt.IV _chatIv(String userId1, String userId2) {
+    final chatKey = generateChatKey(userId1, userId2);
+    final ivHash = sha256.convert(utf8.encode('iv_$chatKey'));
+    return encrypt.IV(
+      Uint8List.fromList(ivHash.bytes.sublist(0, AppConstants.ivLength)),
+    );
+  }
+
+  String _decryptLegacyMessage(
+    String encryptedText,
+    String senderId,
+    String receiverId,
+  ) {
+    if (_encryptionKey == null) {
+      throw Exception('Encryption not initialized');
+    }
+
+    final encrypter = encrypt.Encrypter(
+      encrypt.AES(_encryptionKey!, mode: encrypt.AESMode.cbc),
+    );
+
+    for (final ivString in [
+      '${senderId}_$receiverId',
+      '${receiverId}_$senderId',
+    ]) {
+      final ivHash = sha256.convert(utf8.encode(ivString));
+      final ivBytes = ivHash.bytes.sublist(0, AppConstants.ivLength);
+      final iv = encrypt.IV(Uint8List.fromList(ivBytes));
+
+      try {
+        return encrypter.decrypt64(encryptedText, iv: iv);
+      } catch (_) {
+        continue;
+      }
+    }
+
+    throw Exception('Unable to decrypt message');
   }
 
   Future<void> clearKeys() async {

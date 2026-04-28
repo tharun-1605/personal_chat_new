@@ -34,6 +34,10 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Stream<List<ChatModel>> getChatsStream(String currentUserId) {
+    return _chatRepository.getChatsStream(currentUserId);
+  }
+
   Future<ChatModel?> startChat(
     String currentUserId,
     UserModel participant,
@@ -47,6 +51,9 @@ class ChatProvider extends ChangeNotifier {
         participant,
       );
       _currentChat = chat;
+      if (chat != null && !_chats.any((item) => item.id == chat.id)) {
+        _chats.insert(0, chat);
+      }
       _isLoading = false;
       notifyListeners();
       return chat;
@@ -101,6 +108,9 @@ class ChatProvider extends ChangeNotifier {
         receiverId: receiverId,
         content: content,
       );
+      _chats = await _chatRepository.getChats(senderId);
+      _errorMessage = null;
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = e.toString();

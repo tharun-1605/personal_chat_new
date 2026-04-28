@@ -47,6 +47,7 @@ class ChatRepository {
       'lastMessage': '',
       'lastMessageTime': DateTime.now().toIso8601String(),
       'unreadCount': 0,
+      'unreadCounts': {currentUserId: 0, participant.id: 0},
     };
 
     await _firestore
@@ -61,12 +62,28 @@ class ChatRepository {
     final chatsSnapshot = await _firestore
         .collection(AppConstants.chatsCollection)
         .where('participantIds', arrayContains: currentUserId)
-        .orderBy('lastMessageTime', descending: true)
         .get();
 
+    return _buildChatsFromDocs(chatsSnapshot.docs, currentUserId);
+  }
+
+  Stream<List<ChatModel>> getChatsStream(String currentUserId) {
+    return _firestore
+        .collection(AppConstants.chatsCollection)
+        .where('participantIds', arrayContains: currentUserId)
+        .snapshots()
+        .asyncMap((snapshot) {
+          return _buildChatsFromDocs(snapshot.docs, currentUserId);
+        });
+  }
+
+  Future<List<ChatModel>> _buildChatsFromDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    String currentUserId,
+  ) async {
     final List<ChatModel> chats = [];
 
-    for (final chatDoc in chatsSnapshot.docs) {
+    for (final chatDoc in docs) {
       final chatData = chatDoc.data();
       final participantIds = List<String>.from(
         chatData['participantIds'] ?? [],
@@ -91,6 +108,7 @@ class ChatRepository {
       }
     }
 
+    chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
     return chats;
   }
 
@@ -134,6 +152,8 @@ class ChatRepository {
       'lastMessage': content,
       'lastMessageTime': DateTime.now().toIso8601String(),
       'participantIds': [senderId, receiverId]..sort(),
+      'unreadCounts.$receiverId': FieldValue.increment(1),
+      'unreadCounts.$senderId': 0,
     });
   }
 
@@ -144,7 +164,6 @@ class ChatRepository {
     return _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
-        .where('participantIds', arrayContains: currentUserId)
         .orderBy('timestamp', descending: false)
         .snapshots()
         .map((snapshot) {
@@ -162,7 +181,6 @@ class ChatRepository {
     final messagesSnapshot = await _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
-        .where('participantIds', arrayContains: currentUserId)
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .get();
@@ -184,28 +202,31 @@ class ChatRepository {
         otherUserId,
       );
     } catch (e) {
-      return message.content; // Return encrypted if decryption fails
+      return 'This older message cannot be decrypted. Please send it again.';
     }
   }
 
   Future<void> markMessagesAsRead(String chatId, String currentUserId) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({'unreadCount': 0, 'unreadCounts.$currentUserId': 0});
+
     final messages = await _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
-        .where('participantIds', arrayContains: currentUserId)
         .where('receiverId', isEqualTo: currentUserId)
         .where('isRead', isEqualTo: false)
         .get();
 
     for (final doc in messages.docs) {
-      await doc.reference.update({'isRead': true});
+      try {
+        await doc.reference.update({'isRead': true});
+      } catch (_) {
+        // Older message documents may not have participantIds; the chat-level
+        // unread count above is the source of truth for the inbox badge.
+      }
     }
-
-    // Reset unread count
-    await _firestore
-        .collection(AppConstants.chatsCollection)
-        .doc(chatId)
-        .update({'unreadCount': 0});
   }
 
   Future<void> deleteChat(String chatId) async {
