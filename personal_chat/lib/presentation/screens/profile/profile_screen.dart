@@ -1,11 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/user_avatar.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -45,40 +46,22 @@ class ProfileScreen extends StatelessWidget {
                   child: Stack(
                     children: [
                       Container(
-                        width: 120,
-                        height: 120,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppTheme.primaryColor,
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.primaryColor.withValues(
-                                alpha: 0.3,
-                              ),
+                              color: AppTheme.primaryColor.withValues(alpha: 0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 10),
                             ),
                           ],
                         ),
-                        child: user.photoUrl != null
-                            ? ClipOval(
-                                child: Image.network(
-                                  user.photoUrl!,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Center(
-                                child: Text(
-                                  user.username.isNotEmpty
-                                      ? user.username[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
+                        child: UserAvatar(
+                          photoUrl: user.photoUrl,
+                          username: user.username,
+                          radius: 60,
+                          fontSize: 48,
+                        ),
                       ),
                       Positioned(
                         bottom: 0,
@@ -276,209 +259,216 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showEditProfileSheet(BuildContext context, AuthProvider authProvider) {
-    final user = authProvider.currentUser;
-    if (user == null) return;
-
-    final usernameController = TextEditingController(text: user.username);
-    final bioController = TextEditingController(text: user.bio ?? '');
-    XFile? selectedPhoto;
-    var photoUrl = user.photoUrl;
-    var isSaving = false;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          Future<void> pickPhoto() async {
-            final image = await ImagePicker().pickImage(
-              source: ImageSource.gallery,
-              imageQuality: 80,
-              maxWidth: 1024,
-            );
-            if (image != null) {
-              setSheetState(() => selectedPhoto = image);
-            }
-          }
+      builder: (sheetContext) => _EditProfileSheet(authProvider: authProvider),
+    );
+  }
+}
 
-          Future<String?> uploadPhoto() async {
-            final image = selectedPhoto;
-            if (image == null) return photoUrl;
+class _EditProfileSheet extends StatefulWidget {
+  final AuthProvider authProvider;
 
-            final ref = FirebaseStorage.instance
-                .ref()
-                .child('profile_photos')
-                .child(user.id)
-                .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+  const _EditProfileSheet({required this.authProvider});
 
-            await ref.putFile(
-              File(image.path),
-              SettableMetadata(contentType: 'image/jpeg'),
-            );
-            return ref.getDownloadURL();
-          }
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
 
-          Future<void> saveProfile() async {
-            final username = usernameController.text.trim();
-            final bio = bioController.text.trim();
-            if (username.isEmpty) {
-              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                const SnackBar(content: Text('Username cannot be empty')),
-              );
-              return;
-            }
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late TextEditingController _usernameController;
+  late TextEditingController _bioController;
+  XFile? _selectedPhoto;
+  late String? _photoUrl;
+  bool _isSaving = false;
 
-            setSheetState(() => isSaving = true);
+  @override
+  void initState() {
+    super.initState();
+    final user = widget.authProvider.currentUser;
+    _usernameController = TextEditingController(text: user?.username ?? '');
+    _bioController = TextEditingController(text: user?.bio ?? '');
+    _photoUrl = user?.photoUrl;
+  }
 
-            try {
-              final uploadedPhotoUrl = await uploadPhoto();
-              final success = await authProvider.updateProfile(
-                username: username,
-                bio: bio,
-                photoUrl: uploadedPhotoUrl,
-              );
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _bioController.dispose();
+    super.dispose();
+  }
 
-              if (!sheetContext.mounted) return;
-              if (success) {
-                Navigator.pop(sheetContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Profile updated')),
-                );
-              } else {
-                setSheetState(() => isSaving = false);
-                ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      authProvider.errorMessage ?? 'Profile update failed',
+  Future<void> _pickPhoto() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+      maxWidth: 256,
+      maxHeight: 256,
+    );
+    if (image != null && mounted) {
+      setState(() => _selectedPhoto = image);
+    }
+  }
+
+  Future<String?> _uploadPhoto() async {
+    final image = _selectedPhoto;
+    if (image == null) return _photoUrl;
+
+    final bytes = await File(image.path).readAsBytes();
+    final base64Image = base64Encode(bytes);
+    return 'data:image/jpeg;base64,$base64Image';
+  }
+
+  Future<void> _saveProfile() async {
+    final username = _usernameController.text.trim();
+    final bio = _bioController.text.trim();
+    
+    if (username.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Username cannot be empty')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final uploadedPhotoUrl = await _uploadPhoto();
+      final success = await widget.authProvider.updateProfile(
+        username: username,
+        bio: bio,
+        photoUrl: uploadedPhotoUrl,
+      );
+
+      if (!mounted) return;
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated')),
+        );
+      } else {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.authProvider.errorMessage ?? 'Profile update failed',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update profile: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.authProvider.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                );
-              }
-            } catch (e) {
-              if (!sheetContext.mounted) return;
-              setSheetState(() => isSaving = false);
-              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                SnackBar(content: Text('Failed to update profile: $e')),
-              );
-            }
-          }
-
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-            ),
-            child: SingleChildScrollView(
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: Stack(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Edit Profile',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: isSaving
-                              ? null
-                              : () => Navigator.pop(sheetContext),
-                        ),
-                      ],
+                    UserAvatar(
+                      photoUrl: _selectedPhoto != null ? null : _photoUrl,
+                      username: user.username,
+                      radius: 48,
+                      fontSize: 36,
                     ),
-                    const SizedBox(height: 20),
-                    Center(
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 48,
-                            backgroundColor: AppTheme.primaryColor,
-                            backgroundImage: selectedPhoto != null
-                                ? FileImage(File(selectedPhoto!.path))
-                                : (photoUrl != null
-                                      ? NetworkImage(photoUrl)
-                                      : null),
-                            child: selectedPhoto == null && photoUrl == null
-                                ? Text(
-                                    user.username.isNotEmpty
-                                        ? user.username[0].toUpperCase()
-                                        : '?',
-                                    style: const TextStyle(
-                                      fontSize: 36,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: IconButton.filled(
-                              onPressed: isSaving ? null : pickPhoto,
-                              icon: const Icon(Icons.camera_alt),
-                              tooltip: 'Change profile photo',
-                            ),
-                          ),
-                        ],
+                    if (_selectedPhoto != null)
+                      CircleAvatar(
+                        radius: 48,
+                        backgroundImage: FileImage(File(_selectedPhoto!.path)),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: usernameController,
-                      enabled: !isSaving,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        prefixIcon: Icon(Icons.person_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: bioController,
-                      enabled: !isSaving,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Bio',
-                        prefixIcon: Icon(Icons.info_outlined),
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: isSaving ? null : saveProfile,
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Save Changes'),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: IconButton.filled(
+                        onPressed: _isSaving ? null : _pickPhoto,
+                        icon: const Icon(Icons.camera_alt),
+                        tooltip: 'Change profile photo',
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 24),
+              TextField(
+                controller: _usernameController,
+                enabled: !_isSaving,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.person_outlined),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _bioController,
+                enabled: !_isSaving,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Bio',
+                  prefixIcon: Icon(Icons.info_outlined),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveProfile,
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Save Changes'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-    ).whenComplete(() {
-      usernameController.dispose();
-      bioController.dispose();
-    });
+    );
   }
 }
 

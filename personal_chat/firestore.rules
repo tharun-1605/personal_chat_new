@@ -73,7 +73,9 @@ service cloud.firestore {
     match /messages/{messageId} {
       // Sender or receiver can read messages
       allow read: if isParticipant(resource.data.participantIds)
-        || isLegacyChatParticipant(resource.data.chatId);
+        || isLegacyChatParticipant(resource.data.chatId)
+        || resource.data.receiverId == request.auth.uid
+        || resource.data.senderId == request.auth.uid;
 
       // Only sender can create messages
       allow create: if isAuthenticated()

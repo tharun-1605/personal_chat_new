@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/theme/app_theme.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../chat/chat_screen.dart';
+import '../../widgets/user_avatar.dart';
 
 class ContactsScreen extends StatelessWidget {
   const ContactsScreen({super.key});
@@ -62,42 +63,13 @@ class ContactsScreen extends StatelessWidget {
                     );
                   }
                 },
-                leading: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppTheme.primaryColor,
-                      backgroundImage: contact.photoUrl != null
-                          ? NetworkImage(contact.photoUrl!)
-                          : null,
-                      child: contact.photoUrl == null
-                          ? Text(
-                              contact.username.isNotEmpty
-                                  ? contact.username[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            )
-                          : null,
-                    ),
-                    if (contact.isOnline)
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: AppTheme.successColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                        ),
-                      ),
-                  ],
+                leading: UserAvatar(
+                  photoUrl: contact.photoUrl,
+                  username: contact.username,
+                  radius: 24,
+                  fontSize: 18,
+                  showOnlineStatus: true,
+                  isOnline: contact.isOnline,
                 ),
                 title: Text(
                   contact.username,

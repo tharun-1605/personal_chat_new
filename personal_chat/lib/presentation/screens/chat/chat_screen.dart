@@ -1,15 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/chat_model.dart';
 import '../../../data/models/message_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../widgets/user_avatar.dart';
 
 class ChatScreen extends StatefulWidget {
   final ChatModel chat;
@@ -88,7 +89,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickAndSendImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+      maxWidth: 800,
+      maxHeight: 800,
+    );
     if (image == null) return;
     if (!mounted) return;
 
@@ -105,18 +111,9 @@ class _ChatScreenState extends State<ChatScreen> {
     ).showSnackBar(const SnackBar(content: Text('Sending image...')));
 
     try {
-      final file = File(image.path);
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('chat_images')
-          .child(chatId)
-          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      await ref.putFile(
-        file,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      final url = await ref.getDownloadURL();
+      final bytes = await File(image.path).readAsBytes();
+      final base64Image = base64Encode(bytes);
+      final url = 'data:image/jpeg;base64,$base64Image';
 
       await chatProvider.sendMessage(
         chatId: chatId,
@@ -145,39 +142,14 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Stack(
               children: [
-                CircleAvatar(
+                UserAvatar(
+                  photoUrl: participant?.photoUrl,
+                  username: participant?.username ?? '',
                   radius: 20,
-                  backgroundColor: AppTheme.primaryColor,
-                  backgroundImage: participant?.photoUrl != null
-                      ? NetworkImage(participant!.photoUrl!)
-                      : null,
-                  child: participant?.photoUrl == null
-                      ? Text(
-                          participant?.username.isNotEmpty == true
-                              ? participant!.username[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        )
-                      : null,
+                  fontSize: 16,
+                  showOnlineStatus: true,
+                  isOnline: participant?.isOnline ?? false,
                 ),
-                if (participant?.isOnline == true)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: AppTheme.successColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
               ],
             ),
             const SizedBox(width: 12),
@@ -470,17 +442,26 @@ class _MessageBubble extends StatelessWidget {
             if (type == MessageType.image)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: CachedNetworkImage(
-                  imageUrl: message,
-                  width: 200,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => const SizedBox(
-                    width: 200,
-                    height: 200,
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  errorWidget: (context, url, error) => const Icon(Icons.error),
-                ),
+                child: message.startsWith('data:image')
+                    ? Image.memory(
+                        base64Decode(message.split(',').last),
+                        width: 200,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.error),
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: message,
+                        width: 200,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (context, url, error) =>
+                            const Icon(Icons.error),
+                      ),
               )
             else
               Text(
