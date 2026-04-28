@@ -6,6 +6,7 @@ class MessageModel {
   final List<String> participantIds;
   final String content; // Encrypted content
   final DateTime timestamp;
+  final bool isDelivered;
   final bool isRead;
   final MessageType type;
 
@@ -17,6 +18,7 @@ class MessageModel {
     required this.participantIds,
     required this.content,
     required this.timestamp,
+    this.isDelivered = false,
     this.isRead = false,
     this.type = MessageType.text,
   });
@@ -32,6 +34,7 @@ class MessageModel {
       timestamp: map['timestamp'] != null
           ? DateTime.parse(map['timestamp'])
           : DateTime.now(),
+      isDelivered: map['isDelivered'] ?? map['isRead'] ?? false,
       isRead: map['isRead'] ?? false,
       type: MessageType.values[map['type'] ?? 0],
     );
@@ -46,6 +49,7 @@ class MessageModel {
       'participantIds': participantIds,
       'content': content,
       'timestamp': timestamp.toIso8601String(),
+      'isDelivered': isDelivered,
       'isRead': isRead,
       'type': type.index,
     };
@@ -59,6 +63,7 @@ class MessageModel {
     List<String>? participantIds,
     String? content,
     DateTime? timestamp,
+    bool? isDelivered,
     bool? isRead,
     MessageType? type,
   }) {
@@ -70,6 +75,7 @@ class MessageModel {
       participantIds: participantIds ?? this.participantIds,
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
+      isDelivered: isDelivered ?? this.isDelivered,
       isRead: isRead ?? this.isRead,
       type: type ?? this.type,
     );

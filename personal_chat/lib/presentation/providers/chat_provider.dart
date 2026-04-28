@@ -100,6 +100,7 @@ class ChatProvider extends ChangeNotifier {
     required String senderId,
     required String receiverId,
     required String content,
+    MessageType type = MessageType.text,
   }) async {
     try {
       await _chatRepository.sendMessage(
@@ -107,6 +108,7 @@ class ChatProvider extends ChangeNotifier {
         senderId: senderId,
         receiverId: receiverId,
         content: content,
+        type: type,
       );
       _chats = await _chatRepository.getChats(senderId);
       _errorMessage = null;
@@ -131,7 +133,19 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
+  Future<void> markAsDelivered(String messageId) async {
+    try {
+      await _chatRepository.markMessageAsDelivered(messageId);
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
+  }
+
+  Future<void> updateTypingStatus(
+    String chatId,
+    String userId,
+    bool isTyping,
+  ) async {
     try {
       await _chatRepository.updateTypingStatus(chatId, userId, isTyping);
     } catch (e) {

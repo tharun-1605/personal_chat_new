@@ -98,7 +98,7 @@ class AuthRepository {
         .update({
           'lastSeen': DateTime.now().toIso8601String(),
           'isOnline': true,
-          if (fcmToken != null) 'fcmToken': fcmToken,
+          'fcmToken': ?fcmToken,
         });
 
     final userDoc = await _firestore
@@ -121,6 +121,39 @@ class AuthRepository {
           });
     }
     await _auth.signOut();
+  }
+
+  Future<void> updateFcmToken(String userId, String token) async {
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .update({'fcmToken': token});
+  }
+
+  Future<UserModel> updateProfile({
+    required String userId,
+    required String username,
+    required String bio,
+    String? photoUrl,
+  }) async {
+    final updates = {
+      'username': username,
+      'usernameLowercase': username.toLowerCase(),
+      'bio': bio,
+      'photoUrl': ?photoUrl,
+    };
+
+    await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .update(updates);
+
+    final userDoc = await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .get();
+
+    return UserModel.fromMap(userDoc.data()!);
   }
 
   Future<void> resetPassword(String email) async {

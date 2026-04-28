@@ -27,7 +27,11 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadMessages();
+      }
+    });
     _messageController.addListener(_onTextChanged);
   }
 
@@ -86,39 +90,46 @@ class _ChatScreenState extends State<ChatScreen> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    if (!mounted) return;
 
     final authProvider = context.read<AuthProvider>();
     final chatProvider = context.read<ChatProvider>();
     final currentUser = authProvider.currentUser;
     if (currentUser == null) return;
+    final chatId = widget.chat.id;
+    final receiverId = widget.chat.participantId;
 
     // Show a loading indicator while uploading
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sending image...')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Sending image...')));
 
     try {
       final file = File(image.path);
       final ref = FirebaseStorage.instance
           .ref()
           .child('chat_images')
-          .child(widget.chat.id)
+          .child(chatId)
           .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-      await ref.putFile(file);
+      await ref.putFile(
+        file,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
       final url = await ref.getDownloadURL();
 
       await chatProvider.sendMessage(
-        chatId: widget.chat.id,
+        chatId: chatId,
         senderId: currentUser.id,
-        receiverId: widget.chat.participantId,
+        receiverId: receiverId,
         content: url,
         type: MessageType.image,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send image: $e')),
-      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to send image: $e')));
     }
   }
 
@@ -177,7 +188,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     (c) => c.id == widget.chat.id,
                     orElse: () => widget.chat,
                   );
-                  final isTyping = currentChat.typingStatus[participant?.id ?? ''] == true;
+                  final isTyping =
+                      currentChat.typingStatus[participant?.id ?? ''] == true;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -192,9 +204,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         isTyping ? 'typing...' : (participant?.userId ?? ''),
                         style: TextStyle(
                           fontSize: 12,
-                          color: isTyping ? Colors.greenAccent : Colors.white.withOpacity(0.8),
-                          fontStyle: isTyping ? FontStyle.italic : FontStyle.normal,
-                          fontWeight: isTyping ? FontWeight.w500 : FontWeight.normal,
+                          color: isTyping
+                              ? Colors.greenAccent
+                              : Colors.white.withValues(alpha: 0.8),
+                          fontStyle: isTyping
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                          fontWeight: isTyping
+                              ? FontWeight.w500
+                              : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -245,6 +263,36 @@ class _ChatScreenState extends State<ChatScreen> {
                     }
 
                     final messages = snapshot.data!;
+                    final undeliveredIncomingMessages = messages.where(
+                      (message) =>
+                          message.receiverId == currentUser.id &&
+                          !message.isDelivered,
+                    );
+                    final hasUnreadIncomingMessage = messages.any(
+                      (message) =>
+                          message.receiverId == currentUser.id &&
+                          !message.isRead,
+                    );
+
+                    if (undeliveredIncomingMessages.isNotEmpty) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        for (final message in undeliveredIncomingMessages) {
+                          chatProvider.markAsDelivered(message.id);
+                        }
+                      });
+                    }
+
+                    if (hasUnreadIncomingMessage) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          chatProvider.markAsRead(
+                            widget.chat.id,
+                            currentUser.id,
+                          );
+                        }
+                      });
+                    }
 
                     if (messages.isEmpty) {
                       return Center(
@@ -298,6 +346,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           message: decryptedContent,
                           isMe: isMe,
                           time: message.timestamp,
+                          isDelivered: message.isDelivered,
                           isRead: message.isRead,
                           type: message.type,
                         );
@@ -315,7 +364,7 @@ class _ChatScreenState extends State<ChatScreen> {
               color: Theme.of(context).scaffoldBackgroundColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -375,6 +424,7 @@ class _MessageBubble extends StatelessWidget {
   final String message;
   final bool isMe;
   final DateTime time;
+  final bool isDelivered;
   final bool isRead;
   final MessageType type;
 
@@ -382,6 +432,7 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMe,
     required this.time,
+    required this.isDelivered,
     required this.isRead,
     this.type = MessageType.text,
   });
@@ -449,7 +500,7 @@ class _MessageBubble extends StatelessWidget {
                   DateFormat('HH:mm').format(time),
                   style: TextStyle(
                     color: isMe
-                        ? Colors.white.withOpacity(0.7)
+                        ? Colors.white.withValues(alpha: 0.7)
                         : Colors.grey[600],
                     fontSize: 11,
                   ),
@@ -457,9 +508,11 @@ class _MessageBubble extends StatelessWidget {
                 if (isMe) ...[
                   const SizedBox(width: 4),
                   Icon(
-                    isRead ? Icons.done_all : Icons.done,
+                    isDelivered || isRead ? Icons.done_all : Icons.done,
                     size: 14,
-                    color: isRead ? Colors.lightBlueAccent : Colors.white.withOpacity(0.7),
+                    color: isRead
+                        ? Colors.lightBlueAccent
+                        : Colors.white.withValues(alpha: 0.7),
                   ),
                 ],
               ],

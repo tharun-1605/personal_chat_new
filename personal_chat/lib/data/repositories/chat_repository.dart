@@ -227,12 +227,23 @@ class ChatRepository {
 
     final batch = _firestore.batch();
     for (final doc in messages.docs) {
-      batch.update(doc.reference, {'isRead': true});
+      batch.update(doc.reference, {'isDelivered': true, 'isRead': true});
     }
     await batch.commit();
   }
 
-  Future<void> updateTypingStatus(String chatId, String userId, bool isTyping) async {
+  Future<void> markMessageAsDelivered(String messageId) async {
+    await _firestore
+        .collection(AppConstants.messagesCollection)
+        .doc(messageId)
+        .update({'isDelivered': true});
+  }
+
+  Future<void> updateTypingStatus(
+    String chatId,
+    String userId,
+    bool isTyping,
+  ) async {
     await _firestore
         .collection(AppConstants.chatsCollection)
         .doc(chatId)

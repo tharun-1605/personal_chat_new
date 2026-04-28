@@ -1,5 +1,11 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/config/firebase_config.dart';
+import '../../../core/services/notification_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../chats/chats_screen.dart';
@@ -16,6 +22,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messageSubscription;
+  bool _hasLoadedInitialMessageSnapshot = false;
 
   final List<Widget> _screens = [
     const ChatsScreen(),
@@ -40,8 +48,58 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (currentUser != null) {
       // Load chats
-      context.read<ChatProvider>().loadChats(currentUser.id);
+      final chatProvider = context.read<ChatProvider>();
+      chatProvider.loadChats(currentUser.id);
+      _listenForIncomingMessages(currentUser.id, chatProvider);
     }
+  }
+
+  void _listenForIncomingMessages(
+    String currentUserId,
+    ChatProvider chatProvider,
+  ) {
+    _messageSubscription?.cancel();
+    _hasLoadedInitialMessageSnapshot = false;
+    _messageSubscription = FirebaseConfig.firestore
+        .collection(AppConstants.messagesCollection)
+        .where('receiverId', isEqualTo: currentUserId)
+        .snapshots()
+        .listen((snapshot) {
+          if (!_hasLoadedInitialMessageSnapshot) {
+            _hasLoadedInitialMessageSnapshot = true;
+            for (final doc in snapshot.docs) {
+              final data = doc.data();
+              if (data['isDelivered'] != true) {
+                chatProvider.markAsDelivered(doc.id);
+              }
+            }
+            return;
+          }
+
+          for (final change in snapshot.docChanges) {
+            final data = change.doc.data();
+            final isUnread = data?['isRead'] != true;
+            final isUndelivered = data?['isDelivered'] != true;
+
+            if (change.type == DocumentChangeType.added && isUnread) {
+              NotificationService().showMessageNotification(
+                title: 'New message',
+                body: 'You have received a new message.',
+                payload: data?['chatId'] as String?,
+              );
+            }
+
+            if (isUndelivered) {
+              chatProvider.markAsDelivered(change.doc.id);
+            }
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -52,7 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, -5),
             ),

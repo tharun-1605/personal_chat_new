@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart' as firebase_core;
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../../firebase_options.dart';
 
 class FirebaseConfig {
   static firebase_auth.FirebaseAuth? _auth;
@@ -9,7 +10,9 @@ class FirebaseConfig {
   static FirebaseStorage? _storage;
 
   static Future<void> initialize() async {
-    await firebase_core.Firebase.initializeApp();
+    await firebase_core.Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     _auth = firebase_auth.FirebaseAuth.instance;
     _firestore = FirebaseFirestore.instance;
     _storage = FirebaseStorage.instance;

@@ -26,20 +26,39 @@ exports.sendNotificationOnMessage = functions.firestore
     const senderDoc = await admin.firestore().collection("users").doc(senderId).get();
     const senderName = senderDoc.exists ? senderDoc.data().username : "Someone";
 
+    const notificationTitle = `New message from ${senderName}`;
+    const notificationBody = "You have received a new message.";
+
     const payload = {
+      token: fcmToken,
       notification: {
-        title: `New message from ${senderName}`,
-        body: "You have received a new message.", // Message content is encrypted, so we just say "new message"
-        sound: "default"
+        title: notificationTitle,
+        body: notificationBody // Message content is encrypted, so we just say "new message"
       },
       data: {
+        title: notificationTitle,
+        body: notificationBody,
         chatId: messageData.chatId,
         click_action: "FLUTTER_NOTIFICATION_CLICK"
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "high_importance_channel",
+          sound: "default"
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default"
+          }
+        }
       }
     };
 
     try {
-      await admin.messaging().sendToDevice(fcmToken, payload);
+      await admin.messaging().send(payload);
       console.log("Notification sent successfully");
     } catch (error) {
       console.error("Error sending notification", error);

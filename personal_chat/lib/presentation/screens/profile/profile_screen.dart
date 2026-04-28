@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
@@ -36,60 +40,65 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               children: [
                 // Profile Picture
-                Stack(
-                  children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppTheme.primaryColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryColor.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: user.photoUrl != null
-                          ? ClipOval(
-                              child: Image.network(
-                                user.photoUrl!,
-                                fit: BoxFit.cover,
+                GestureDetector(
+                  onTap: () => _showEditProfileSheet(context, authProvider),
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.primaryColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.3,
                               ),
-                            )
-                          : Center(
-                              child: Text(
-                                user.username.isNotEmpty
-                                    ? user.username[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                  fontSize: 48,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: user.photoUrl != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  user.photoUrl!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Center(
+                                child: Text(
+                                  user.username.isNotEmpty
+                                      ? user.username[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 20,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
                 // Username
@@ -108,7 +117,7 @@ class ProfileScreen extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -272,6 +281,9 @@ class ProfileScreen extends StatelessWidget {
 
     final usernameController = TextEditingController(text: user.username);
     final bioController = TextEditingController(text: user.bio ?? '');
+    XFile? selectedPhoto;
+    var photoUrl = user.photoUrl;
+    var isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -279,63 +291,194 @@ class ProfileScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Edit Profile',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          Future<void> pickPhoto() async {
+            final image = await ImagePicker().pickImage(
+              source: ImageSource.gallery,
+              imageQuality: 80,
+              maxWidth: 1024,
+            );
+            if (image != null) {
+              setSheetState(() => selectedPhoto = image);
+            }
+          }
+
+          Future<String?> uploadPhoto() async {
+            final image = selectedPhoto;
+            if (image == null) return photoUrl;
+
+            final ref = FirebaseStorage.instance
+                .ref()
+                .child('profile_photos')
+                .child(user.id)
+                .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+            await ref.putFile(
+              File(image.path),
+              SettableMetadata(contentType: 'image/jpeg'),
+            );
+            return ref.getDownloadURL();
+          }
+
+          Future<void> saveProfile() async {
+            final username = usernameController.text.trim();
+            final bio = bioController.text.trim();
+            if (username.isEmpty) {
+              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                const SnackBar(content: Text('Username cannot be empty')),
+              );
+              return;
+            }
+
+            setSheetState(() => isSaving = true);
+
+            try {
+              final uploadedPhotoUrl = await uploadPhoto();
+              final success = await authProvider.updateProfile(
+                username: username,
+                bio: bio,
+                photoUrl: uploadedPhotoUrl,
+              );
+
+              if (!sheetContext.mounted) return;
+              if (success) {
+                Navigator.pop(sheetContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile updated')),
+                );
+              } else {
+                setSheetState(() => isSaving = false);
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      authProvider.errorMessage ?? 'Profile update failed',
+                    ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  prefixIcon: Icon(Icons.person_outlined),
+                );
+              }
+            } catch (e) {
+              if (!sheetContext.mounted) return;
+              setSheetState(() => isSaving = false);
+              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                SnackBar(content: Text('Failed to update profile: $e')),
+              );
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Edit Profile',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: isSaving
+                              ? null
+                              : () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 48,
+                            backgroundColor: AppTheme.primaryColor,
+                            backgroundImage: selectedPhoto != null
+                                ? FileImage(File(selectedPhoto!.path))
+                                : (photoUrl != null
+                                      ? NetworkImage(photoUrl)
+                                      : null),
+                            child: selectedPhoto == null && photoUrl == null
+                                ? Text(
+                                    user.username.isNotEmpty
+                                        ? user.username[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontSize: 36,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: IconButton.filled(
+                              onPressed: isSaving ? null : pickPhoto,
+                              icon: const Icon(Icons.camera_alt),
+                              tooltip: 'Change profile photo',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: usernameController,
+                      enabled: !isSaving,
+                      decoration: const InputDecoration(
+                        labelText: 'Username',
+                        prefixIcon: Icon(Icons.person_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: bioController,
+                      enabled: !isSaving,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Bio',
+                        prefixIcon: Icon(Icons.info_outlined),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isSaving ? null : saveProfile,
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save Changes'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: bioController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Bio',
-                  prefixIcon: Icon(Icons.info_outlined),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    // Save profile changes
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
-    );
+    ).whenComplete(() {
+      usernameController.dispose();
+      bioController.dispose();
+    });
   }
 }
 
@@ -359,7 +502,7 @@ class _InfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -370,7 +513,7 @@ class _InfoCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: AppTheme.primaryColor),
