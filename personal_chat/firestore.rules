@@ -86,12 +86,9 @@ service cloud.firestore {
 
       // Only sender or receiver can update (e.g., mark as read)
       allow update: if (
-          isParticipant(resource.data.participantIds)
-          && request.resource.data.participantIds == resource.data.participantIds
+          ('participantIds' in resource.data && isParticipant(resource.data.participantIds) && request.resource.data.participantIds == resource.data.participantIds)
         ) || (
           isLegacyChatParticipant(resource.data.chatId)
-          && isParticipant(request.resource.data.participantIds)
-          && request.resource.data.participantIds.size() == 2
         );
 
       // Only sender can delete their own messages

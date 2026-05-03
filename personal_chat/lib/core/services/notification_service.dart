@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart' as firebase_core;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
@@ -176,6 +178,54 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint('Failed to show local notification: $e');
+    }
+  }
+
+  Future<void> sendPushNotification({
+    required String receiverToken,
+    required String title,
+    required String body,
+    String? chatId,
+  }) async {
+    try {
+      final url = Uri.parse('https://fcm.googleapis.com/fcm/send');
+      final headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'key=eA1B2cD3E4fG5hI6jK7lM8nO9pQ0rS1tU2vW3xY4zA5bC6dE7fG8hI9jK0lM',
+      };
+
+      final payload = {
+        'to': receiverToken,
+        'notification': {
+          'title': title,
+          'body': body,
+          'sound': 'default',
+          'android_channel_id': 'high_importance_channel',
+        },
+        if (chatId != null)
+          'data': {
+            'chatId': chatId,
+            'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+            'title': title,
+            'body': body,
+          },
+        'priority': 'high',
+        'content_available': true,
+      };
+
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('Push notification sent successfully');
+      } else {
+        debugPrint('Failed to send push notification: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error sending push notification: $e');
     }
   }
 

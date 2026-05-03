@@ -6,7 +6,7 @@ import '../../core/services/encryption_service.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
-
+import '../../core/services/notification_service.dart';
 class ChatRepository {
   final FirebaseFirestore _firestore = FirebaseConfig.firestore;
   final EncryptionService _encryptionService = EncryptionService();
@@ -158,6 +158,37 @@ class ChatRepository {
       'unreadCounts.$senderId': 0,
       'typingStatus.$senderId': false,
     });
+
+    // Send push notification directly via FCM legacy API
+    try {
+      final receiverDoc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(receiverId)
+          .get();
+      if (receiverDoc.exists) {
+        final receiver = UserModel.fromMap(receiverDoc.data()!);
+        if (receiver.fcmToken != null && receiver.fcmToken!.isNotEmpty) {
+          final senderDoc = await _firestore
+              .collection(AppConstants.usersCollection)
+              .doc(senderId)
+              .get();
+          final senderName = senderDoc.exists
+              ? UserModel.fromMap(senderDoc.data()!).username
+              : 'Someone';
+          
+          final messageBody = type == MessageType.image ? '📷 Image' : content;
+
+          await NotificationService().sendPushNotification(
+            receiverToken: receiver.fcmToken!,
+            title: senderName,
+            body: messageBody,
+            chatId: chatId,
+          );
+        }
+      }
+    } catch (e) {
+      print('Failed to send push notification: $e');
+    }
   }
 
   Stream<List<MessageModel>> getMessagesStream(
