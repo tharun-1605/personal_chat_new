@@ -10,14 +10,21 @@ class ChatProvider extends ChangeNotifier {
   List<ChatModel> _chats = [];
   List<MessageModel> _messages = [];
   ChatModel? _currentChat;
+  MessageModel? _replyingTo;
   bool _isLoading = false;
   String? _errorMessage;
 
   List<ChatModel> get chats => _chats;
   List<MessageModel> get messages => _messages;
   ChatModel? get currentChat => _currentChat;
+  MessageModel? get replyingTo => _replyingTo;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  void setReplyingTo(MessageModel? message) {
+    _replyingTo = message;
+    notifyListeners();
+  }
 
   Future<void> loadChats(String currentUserId) async {
     _isLoading = true;
@@ -109,7 +116,10 @@ class ChatProvider extends ChangeNotifier {
         receiverId: receiverId,
         content: content,
         type: type,
+        replyToId: _replyingTo?.id,
+        replyToContent: _replyingTo != null ? decryptMessage(_replyingTo!, senderId) : null,
       );
+      _replyingTo = null;
       _chats = await _chatRepository.getChats(senderId);
       _errorMessage = null;
       notifyListeners();
@@ -161,6 +171,23 @@ class ChatProvider extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
+    }
+  }
+
+  Future<void> deleteMessageForEveryone(String messageId) async {
+    try {
+      await _chatRepository.deleteMessageForEveryone(messageId);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> toggleReaction(String messageId, String emoji, String currentUserId) async {
+    try {
+      await _chatRepository.toggleReaction(messageId, emoji, currentUserId);
+    } catch (e) {
+      // Ignore reaction errors to avoid spamming UI
     }
   }
 

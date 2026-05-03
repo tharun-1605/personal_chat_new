@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/chat_model.dart';
@@ -55,6 +56,23 @@ class _ChatScreenState extends State<ChatScreen> {
     if (currentUser != null) {
       chatProvider.markAsRead(widget.chat.id, currentUser.id);
       chatProvider.loadMessages(widget.chat.id, currentUser.id);
+    }
+  }
+
+  String _formatLastSeen(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final targetDate = DateTime(time.year, time.month, time.day);
+
+    final timeString = DateFormat('h:mm a').format(time);
+
+    if (targetDate == today) {
+      return 'last seen today at $timeString';
+    } else if (targetDate == yesterday) {
+      return 'last seen yesterday at $timeString';
+    } else {
+      return 'last seen ${DateFormat('MMM d').format(time)} at $timeString';
     }
   }
 
@@ -173,16 +191,20 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                       Text(
-                        isTyping ? 'typing...' : (participant?.userId ?? ''),
+                        isTyping 
+                            ? 'typing...' 
+                            : (participant?.isOnline == true 
+                                ? 'Online' 
+                                : _formatLastSeen(participant?.lastSeen ?? DateTime.now())),
                         style: TextStyle(
                           fontSize: 12,
-                          color: isTyping
+                          color: isTyping || participant?.isOnline == true
                               ? Colors.greenAccent
                               : Colors.white.withValues(alpha: 0.8),
                           fontStyle: isTyping
                               ? FontStyle.italic
                               : FontStyle.normal,
-                          fontWeight: isTyping
+                          fontWeight: isTyping || participant?.isOnline == true
                               ? FontWeight.w500
                               : FontWeight.normal,
                         ),
@@ -314,13 +336,113 @@ class _ChatScreenState extends State<ChatScreen> {
                           currentUser.id,
                         );
 
-                        return _MessageBubble(
-                          message: decryptedContent,
-                          isMe: isMe,
-                          time: message.timestamp,
-                          isDelivered: message.isDelivered,
-                          isRead: message.isRead,
-                          type: message.type,
+                        String? decryptedReply;
+                        if (message.replyToContent != null) {
+                           decryptedReply = chatProvider.decryptMessage(
+                             message.copyWith(content: message.replyToContent!),
+                             currentUser.id,
+                           );
+                        }
+
+                        return Dismissible(
+                          key: ValueKey(message.id),
+                          direction: DismissDirection.startToEnd,
+                          confirmDismiss: (_) async {
+                            chatProvider.setReplyingTo(message);
+                            return false;
+                          },
+                          background: Container(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.only(left: 20),
+                            child: const Icon(Icons.reply, color: AppTheme.primaryColor),
+                          ),
+                          child: GestureDetector(
+                            onLongPress: () {
+                              if (message.isDeleted && !isMe) return;
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: Theme.of(context).cardColor,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                ),
+                                builder: (context) => SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (!message.isDeleted)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                            children: ['❤️', '👍', '😂', '😮', '😢', '🙏'].map((emoji) {
+                                              return GestureDetector(
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  chatProvider.toggleReaction(message.id, emoji, currentUser.id);
+                                                },
+                                                child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      if (!message.isDeleted) const Divider(height: 1),
+                                      if (!message.isDeleted && message.type == MessageType.text)
+                                        ListTile(
+                                          leading: const Icon(Icons.copy),
+                                          title: const Text('Copy Text'),
+                                          onTap: () {
+                                            Clipboard.setData(ClipboardData(text: decryptedContent));
+                                            Navigator.pop(context);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Message copied')),
+                                            );
+                                          },
+                                        ),
+                                      if (isMe && !message.isDeleted)
+                                        ListTile(
+                                          leading: const Icon(Icons.delete, color: Colors.red),
+                                          title: const Text('Delete for Everyone', style: TextStyle(color: Colors.red)),
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            showDialog(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                title: const Text('Delete Message'),
+                                                content: const Text('Delete this message for everyone?'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(context),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () {
+                                                      Navigator.pop(context);
+                                                      chatProvider.deleteMessageForEveryone(message.id);
+                                                    },
+                                                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            child: _MessageBubble(
+                              message: message.isDeleted ? '' : decryptedContent,
+                              isMe: isMe,
+                              time: message.timestamp,
+                              isDelivered: message.isDelivered,
+                              isRead: message.isRead,
+                              type: message.type,
+                              isDeleted: message.isDeleted,
+                              replyToContent: decryptedReply,
+                              reactions: message.reactions,
+                            ),
+                          ),
                         );
                       },
                     );
@@ -328,6 +450,49 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               },
             ),
+          ),
+          // Reply Bar
+          Consumer<ChatProvider>(
+            builder: (context, provider, child) {
+              if (provider.replyingTo == null) return const SizedBox.shrink();
+              final replyMsg = provider.replyingTo!;
+              final isMyReply = replyMsg.senderId == currentUser?.id;
+              final decryptedReplyTo = provider.decryptMessage(replyMsg, currentUser?.id ?? '');
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.reply, color: AppTheme.primaryColor, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isMyReply ? 'You' : widget.chat.participant?.username ?? 'User',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 13),
+                          ),
+                          Text(
+                            replyMsg.type == MessageType.image ? '📷 Image' : decryptedReplyTo,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => provider.setReplyingTo(null),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           // Message Input
           Container(
@@ -399,6 +564,9 @@ class _MessageBubble extends StatelessWidget {
   final bool isDelivered;
   final bool isRead;
   final MessageType type;
+  final bool isDeleted;
+  final String? replyToContent;
+  final Map<String, String>? reactions;
 
   const _MessageBubble({
     required this.message,
@@ -407,6 +575,9 @@ class _MessageBubble extends StatelessWidget {
     required this.isDelivered,
     required this.isRead,
     this.type = MessageType.text,
+    this.isDeleted = false,
+    this.replyToContent,
+    this.reactions,
   });
 
   @override
@@ -415,31 +586,63 @@ class _MessageBubble extends StatelessWidget {
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isMe
-              ? (isDark
-                    ? AppTheme.sentMessageColorDark
-                    : AppTheme.sentMessageColor)
-              : (isDark
-                    ? AppTheme.receivedMessageColorDark
-                    : AppTheme.receivedMessageColor),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
-          ),
-        ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            decoration: BoxDecoration(
+              color: isMe
+                  ? (isDark
+                        ? AppTheme.sentMessageColorDark
+                        : AppTheme.sentMessageColor)
+                  : (isDark
+                        ? AppTheme.receivedMessageColorDark
+                        : AppTheme.receivedMessageColor),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isMe ? 16 : 4),
+                bottomRight: Radius.circular(isMe ? 4 : 16),
+              ),
+            ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (type == MessageType.image)
+            if (!isDeleted && replyToContent != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  replyToContent!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isMe ? Colors.white70 : (isDark ? Colors.white70 : Colors.black54),
+                  ),
+                ),
+              ),
+            if (isDeleted)
+              Text(
+                '🚫 This message was deleted',
+                style: TextStyle(
+                  color: isMe
+                      ? Colors.white.withValues(alpha: 0.7)
+                      : (isDark ? Colors.white54 : Colors.black54),
+                  fontSize: 15,
+                  fontStyle: FontStyle.italic,
+                ),
+              )
+            else if (type == MessageType.image)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: message.startsWith('data:image')
@@ -500,6 +703,49 @@ class _MessageBubble extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      if (reactions != null && reactions!.isNotEmpty)
+            Positioned(
+              bottom: -4,
+              right: isMe ? 12 : null,
+              left: isMe ? null : 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    )
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      reactions!.values.toSet().join(''),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    if (reactions!.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          '${reactions!.length}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

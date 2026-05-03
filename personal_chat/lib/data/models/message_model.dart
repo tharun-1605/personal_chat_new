@@ -9,6 +9,10 @@ class MessageModel {
   final bool isDelivered;
   final bool isRead;
   final MessageType type;
+  final String? replyToId;
+  final String? replyToContent; // Encrypted
+  final bool isDeleted;
+  final Map<String, String>? reactions;
 
   MessageModel({
     required this.id,
@@ -21,6 +25,10 @@ class MessageModel {
     this.isDelivered = false,
     this.isRead = false,
     this.type = MessageType.text,
+    this.replyToId,
+    this.replyToContent,
+    this.isDeleted = false,
+    this.reactions,
   });
 
   factory MessageModel.fromMap(Map<String, dynamic> map) {
@@ -37,6 +45,10 @@ class MessageModel {
       isDelivered: map['isDelivered'] ?? map['isRead'] ?? false,
       isRead: map['isRead'] ?? false,
       type: MessageType.values[map['type'] ?? 0],
+      replyToId: map['replyToId'],
+      replyToContent: map['replyToContent'],
+      isDeleted: map['isDeleted'] ?? false,
+      reactions: map['reactions'] != null ? Map<String, String>.from(map['reactions']) : null,
     );
   }
 
@@ -52,6 +64,10 @@ class MessageModel {
       'isDelivered': isDelivered,
       'isRead': isRead,
       'type': type.index,
+      'replyToId': replyToId,
+      'replyToContent': replyToContent,
+      'isDeleted': isDeleted,
+      'reactions': reactions,
     };
   }
 
@@ -66,6 +82,10 @@ class MessageModel {
     bool? isDelivered,
     bool? isRead,
     MessageType? type,
+    String? replyToId,
+    String? replyToContent,
+    bool? isDeleted,
+    Map<String, String>? reactions,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -78,6 +98,10 @@ class MessageModel {
       isDelivered: isDelivered ?? this.isDelivered,
       isRead: isRead ?? this.isRead,
       type: type ?? this.type,
+      replyToId: replyToId ?? this.replyToId,
+      replyToContent: replyToContent ?? this.replyToContent,
+      isDeleted: isDeleted ?? this.isDeleted,
+      reactions: reactions ?? this.reactions,
     );
   }
 }

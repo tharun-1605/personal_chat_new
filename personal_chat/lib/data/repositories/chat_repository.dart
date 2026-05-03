@@ -118,6 +118,8 @@ class ChatRepository {
     required String receiverId,
     required String content,
     MessageType type = MessageType.text,
+    String? replyToId,
+    String? replyToContent,
   }) async {
     final messageId = _uuid.v4();
 
@@ -127,6 +129,15 @@ class ChatRepository {
       senderId,
       receiverId,
     );
+    
+    String? encryptedReplyContent;
+    if (replyToContent != null) {
+      encryptedReplyContent = _encryptionService.encryptMessage(
+        replyToContent,
+        senderId,
+        receiverId,
+      );
+    }
 
     final message = MessageModel(
       id: messageId,
@@ -137,6 +148,8 @@ class ChatRepository {
       content: encryptedContent,
       timestamp: DateTime.now(),
       type: type,
+      replyToId: replyToId,
+      replyToContent: encryptedReplyContent,
     );
 
     final chatRef = _firestore
@@ -297,5 +310,36 @@ class ChatRepository {
         .collection(AppConstants.chatsCollection)
         .doc(chatId)
         .delete();
+  }
+
+  Future<void> deleteMessageForEveryone(String messageId) async {
+    await _firestore
+        .collection(AppConstants.messagesCollection)
+        .doc(messageId)
+        .update({
+      'isDeleted': true,
+      'content': '',
+      'type': MessageType.text.index,
+    });
+  }
+
+  Future<void> toggleReaction(String messageId, String emoji, String currentUserId) async {
+    final docRef = _firestore.collection(AppConstants.messagesCollection).doc(messageId);
+    
+    await _firestore.runTransaction((transaction) async {
+      final doc = await transaction.get(docRef);
+      if (!doc.exists) return;
+      
+      final data = doc.data()!;
+      final reactions = Map<String, dynamic>.from(data['reactions'] ?? {});
+      
+      if (reactions[currentUserId] == emoji) {
+        reactions.remove(currentUserId);
+      } else {
+        reactions[currentUserId] = emoji;
+      }
+      
+      transaction.update(docRef, {'reactions': reactions});
+    });
   }
 }
