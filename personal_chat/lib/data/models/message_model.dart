@@ -12,7 +12,13 @@ class MessageModel {
   final String? replyToId;
   final String? replyToContent; // Encrypted
   final bool isDeleted;
+  final bool isEdited;
   final Map<String, String>? reactions;
+  final String? fileName; // For document messages
+  final int? fileSize; // For document messages (bytes)
+  final int? audioDuration; // For audio messages (seconds)
+  final DateTime? deliveredAt;
+  final DateTime? readAt;
 
   MessageModel({
     required this.id,
@@ -28,7 +34,13 @@ class MessageModel {
     this.replyToId,
     this.replyToContent,
     this.isDeleted = false,
+    this.isEdited = false,
     this.reactions,
+    this.fileName,
+    this.fileSize,
+    this.audioDuration,
+    this.deliveredAt,
+    this.readAt,
   });
 
   factory MessageModel.fromMap(Map<String, dynamic> map) {
@@ -48,7 +60,13 @@ class MessageModel {
       replyToId: map['replyToId'],
       replyToContent: map['replyToContent'],
       isDeleted: map['isDeleted'] ?? false,
+      isEdited: map['isEdited'] ?? false,
       reactions: map['reactions'] != null ? Map<String, String>.from(map['reactions']) : null,
+      fileName: map['fileName'],
+      fileSize: map['fileSize'],
+      audioDuration: map['audioDuration'],
+      deliveredAt: map['deliveredAt'] != null ? DateTime.parse(map['deliveredAt']) : null,
+      readAt: map['readAt'] != null ? DateTime.parse(map['readAt']) : null,
     );
   }
 
@@ -67,7 +85,13 @@ class MessageModel {
       'replyToId': replyToId,
       'replyToContent': replyToContent,
       'isDeleted': isDeleted,
+      'isEdited': isEdited,
       'reactions': reactions,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'audioDuration': audioDuration,
+      'deliveredAt': deliveredAt?.toIso8601String(),
+      'readAt': readAt?.toIso8601String(),
     };
   }
 
@@ -85,7 +109,13 @@ class MessageModel {
     String? replyToId,
     String? replyToContent,
     bool? isDeleted,
+    bool? isEdited,
     Map<String, String>? reactions,
+    String? fileName,
+    int? fileSize,
+    int? audioDuration,
+    DateTime? deliveredAt,
+    DateTime? readAt,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -101,9 +131,15 @@ class MessageModel {
       replyToId: replyToId ?? this.replyToId,
       replyToContent: replyToContent ?? this.replyToContent,
       isDeleted: isDeleted ?? this.isDeleted,
+      isEdited: isEdited ?? this.isEdited,
       reactions: reactions ?? this.reactions,
+      fileName: fileName ?? this.fileName,
+      fileSize: fileSize ?? this.fileSize,
+      audioDuration: audioDuration ?? this.audioDuration,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
+      readAt: readAt ?? this.readAt,
     );
   }
 }
 
-enum MessageType { text, image, file }
+enum MessageType { text, image, file, audio, location, document }

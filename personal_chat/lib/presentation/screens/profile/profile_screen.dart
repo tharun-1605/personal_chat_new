@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/user_avatar.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -195,7 +196,7 @@ class ProfileScreen extends StatelessWidget {
               trailing: Switch(
                 value: Theme.of(context).brightness == Brightness.dark,
                 onChanged: (value) {
-                  // Toggle theme
+                  context.read<ThemeProvider>().toggleTheme();
                 },
               ),
             ),

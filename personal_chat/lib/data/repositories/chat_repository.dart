@@ -120,6 +120,8 @@ class ChatRepository {
     MessageType type = MessageType.text,
     String? replyToId,
     String? replyToContent,
+    String? fileName,
+    int? fileSize,
   }) async {
     final messageId = _uuid.v4();
 
@@ -150,6 +152,8 @@ class ChatRepository {
       type: type,
       replyToId: replyToId,
       replyToContent: encryptedReplyContent,
+      fileName: fileName,
+      fileSize: fileSize,
     );
 
     final chatRef = _firestore
@@ -206,11 +210,18 @@ class ChatRepository {
 
   Stream<List<MessageModel>> getMessagesStream(
     String chatId,
-    String currentUserId,
-  ) {
-    return _firestore
+    String currentUserId, {
+    DateTime? clearedAt,
+  }) {
+    var query = _firestore
         .collection(AppConstants.messagesCollection)
-        .where('chatId', isEqualTo: chatId)
+        .where('chatId', isEqualTo: chatId);
+
+    if (clearedAt != null) {
+      query = query.where('timestamp', isGreaterThan: clearedAt.toIso8601String());
+    }
+
+    return query
         .orderBy('timestamp', descending: true)
         .limit(100)
         .snapshots()
@@ -224,11 +235,18 @@ class ChatRepository {
   Future<List<MessageModel>> getMessages(
     String chatId, {
     required String currentUserId,
+    DateTime? clearedAt,
     int limit = 50,
   }) async {
-    final messagesSnapshot = await _firestore
+    var query = _firestore
         .collection(AppConstants.messagesCollection)
-        .where('chatId', isEqualTo: chatId)
+        .where('chatId', isEqualTo: chatId);
+
+    if (clearedAt != null) {
+      query = query.where('timestamp', isGreaterThan: clearedAt.toIso8601String());
+    }
+
+    final messagesSnapshot = await query
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .get();
@@ -236,6 +254,10 @@ class ChatRepository {
     return messagesSnapshot.docs
         .map((doc) => MessageModel.fromMap(doc.data()))
         .toList();
+  }
+
+  String encryptForEdit(String plainText, String senderId, String receiverId) {
+    return _encryptionService.encryptMessage(plainText, senderId, receiverId);
   }
 
   String decryptMessage(MessageModel message, String currentUserId) {
@@ -270,8 +292,9 @@ class ChatRepository {
     if (messages.docs.isEmpty) return;
 
     final batch = _firestore.batch();
+    final now = DateTime.now().toIso8601String();
     for (final doc in messages.docs) {
-      batch.update(doc.reference, {'isDelivered': true, 'isRead': true});
+      batch.update(doc.reference, {'isDelivered': true, 'isRead': true, 'deliveredAt': now, 'readAt': now});
     }
     await batch.commit();
   }
@@ -280,7 +303,7 @@ class ChatRepository {
     await _firestore
         .collection(AppConstants.messagesCollection)
         .doc(messageId)
-        .update({'isDelivered': true});
+        .update({'isDelivered': true, 'deliveredAt': DateTime.now().toIso8601String()});
   }
 
   Future<void> updateTypingStatus(
@@ -312,6 +335,15 @@ class ChatRepository {
         .delete();
   }
 
+  Future<void> clearChat(String chatId, String userId) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({
+      'clearedAt.$userId': DateTime.now().toIso8601String(),
+    });
+  }
+
   Future<void> deleteMessageForEveryone(String messageId) async {
     await _firestore
         .collection(AppConstants.messagesCollection)
@@ -321,6 +353,38 @@ class ChatRepository {
       'content': '',
       'type': MessageType.text.index,
     });
+  }
+
+  Future<void> editMessage(String messageId, String newEncryptedContent) async {
+    await _firestore
+        .collection(AppConstants.messagesCollection)
+        .doc(messageId)
+        .update({'content': newEncryptedContent, 'isEdited': true});
+  }
+
+  Future<void> setDisappearingMessages(String chatId, String mode) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({'disappearingMode': mode});
+  }
+
+  Future<void> togglePinChat(String chatId, String userId, bool isPinned) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({
+      'pinnedBy': isPinned
+          ? FieldValue.arrayRemove([userId])
+          : FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> setWallpaper(String chatId, String? color) async {
+    await _firestore
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .update({'wallpaperColor': color});
   }
 
   Future<void> toggleReaction(String messageId, String emoji, String currentUserId) async {

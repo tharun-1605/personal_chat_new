@@ -10,6 +10,10 @@ class ChatModel {
   final int unreadCount;
   final Map<String, int> unreadCounts;
   final Map<String, bool> typingStatus;
+  final Map<String, DateTime> clearedAt;
+  final String disappearingMode; // 'off', '24h', '7days'
+  final List<String> pinnedBy;
+  final String? wallpaperColor;
 
   ChatModel({
     required this.id,
@@ -21,6 +25,10 @@ class ChatModel {
     this.unreadCount = 0,
     this.unreadCounts = const {},
     this.typingStatus = const {},
+    this.clearedAt = const {},
+    this.disappearingMode = 'off',
+    this.pinnedBy = const [],
+    this.wallpaperColor,
   });
 
   factory ChatModel.fromMap(
@@ -32,6 +40,9 @@ class ChatModel {
     );
     final typingStatusMap = Map<String, dynamic>.from(
       map['typingStatus'] ?? const {},
+    );
+    final clearedAtMap = Map<String, dynamic>.from(
+      map['clearedAt'] ?? const {},
     );
 
     return ChatModel(
@@ -50,6 +61,12 @@ class ChatModel {
       typingStatus: typingStatusMap.map(
         (key, value) => MapEntry(key, value is bool ? value : false),
       ),
+      clearedAt: clearedAtMap.map(
+        (key, value) => MapEntry(key, DateTime.parse(value)),
+      ),
+      disappearingMode: map['disappearingMode'] ?? 'off',
+      pinnedBy: List<String>.from(map['pinnedBy'] ?? const []),
+      wallpaperColor: map['wallpaperColor'],
     );
   }
 
@@ -63,6 +80,10 @@ class ChatModel {
       'unreadCount': unreadCount,
       'unreadCounts': unreadCounts,
       'typingStatus': typingStatus,
+      'clearedAt': clearedAt.map((key, value) => MapEntry(key, value.toIso8601String())),
+      'disappearingMode': disappearingMode,
+      'pinnedBy': pinnedBy,
+      'wallpaperColor': wallpaperColor,
     };
   }
 
@@ -76,6 +97,10 @@ class ChatModel {
     int? unreadCount,
     Map<String, int>? unreadCounts,
     Map<String, bool>? typingStatus,
+    Map<String, DateTime>? clearedAt,
+    String? disappearingMode,
+    List<String>? pinnedBy,
+    String? wallpaperColor,
   }) {
     return ChatModel(
       id: id ?? this.id,
@@ -87,6 +112,10 @@ class ChatModel {
       unreadCount: unreadCount ?? this.unreadCount,
       unreadCounts: unreadCounts ?? this.unreadCounts,
       typingStatus: typingStatus ?? this.typingStatus,
+      clearedAt: clearedAt ?? this.clearedAt,
+      disappearingMode: disappearingMode ?? this.disappearingMode,
+      pinnedBy: pinnedBy ?? this.pinnedBy,
+      wallpaperColor: wallpaperColor ?? this.wallpaperColor,
     );
   }
 }

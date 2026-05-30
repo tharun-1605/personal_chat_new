@@ -81,7 +81,12 @@ class ChatProvider extends ChangeNotifier {
     String chatId,
     String currentUserId,
   ) {
-    return _chatRepository.getMessagesStream(chatId, currentUserId);
+    final chat = _chats.firstWhere((c) => c.id == chatId, orElse: () => _currentChat!);
+    return _chatRepository.getMessagesStream(
+      chatId, 
+      currentUserId,
+      clearedAt: chat.clearedAt[currentUserId],
+    );
   }
 
   Future<void> loadMessages(String chatId, String currentUserId) async {
@@ -89,9 +94,11 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final chat = _chats.firstWhere((c) => c.id == chatId, orElse: () => _currentChat!);
       _messages = await _chatRepository.getMessages(
         chatId,
         currentUserId: currentUserId,
+        clearedAt: chat.clearedAt[currentUserId],
       );
       _isLoading = false;
       notifyListeners();
@@ -108,6 +115,8 @@ class ChatProvider extends ChangeNotifier {
     required String receiverId,
     required String content,
     MessageType type = MessageType.text,
+    String? fileName,
+    int? fileSize,
   }) async {
     try {
       await _chatRepository.sendMessage(
@@ -118,6 +127,8 @@ class ChatProvider extends ChangeNotifier {
         type: type,
         replyToId: _replyingTo?.id,
         replyToContent: _replyingTo != null ? decryptMessage(_replyingTo!, senderId) : null,
+        fileName: fileName,
+        fileSize: fileSize,
       );
       _replyingTo = null;
       _chats = await _chatRepository.getChats(senderId);
@@ -174,6 +185,17 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> clearChat(String chatId, String currentUserId) async {
+    try {
+      await _chatRepository.clearChat(chatId, currentUserId);
+      _messages = [];
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
   Future<void> deleteMessageForEveryone(String messageId) async {
     try {
       await _chatRepository.deleteMessageForEveryone(messageId);
@@ -191,9 +213,39 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  void clearCurrentChat() {
-    _currentChat = null;
-    _messages = [];
-    notifyListeners();
+  Future<void> clearCurrentChat() async {}
+
+  Future<void> editMessage(String messageId, String newContent, String currentUserId, String otherUserId) async {
+    try {
+      final encrypted = _chatRepository.encryptForEdit(newContent, currentUserId, otherUserId);
+      await _chatRepository.editMessage(messageId, encrypted);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setDisappearingMessages(String chatId, String mode) async {
+    try {
+      await _chatRepository.setDisappearingMessages(chatId, mode);
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
+  }
+
+  Future<void> togglePinChat(String chatId, String userId, bool isPinned) async {
+    try {
+      await _chatRepository.togglePinChat(chatId, userId, isPinned);
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
+  }
+
+  Future<void> setWallpaper(String chatId, String? color) async {
+    try {
+      await _chatRepository.setWallpaper(chatId, color);
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
   }
 }
