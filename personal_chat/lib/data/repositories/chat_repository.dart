@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/config/firebase_config.dart';
@@ -176,12 +178,13 @@ class ChatRepository {
       'typingStatus.$senderId': false,
     });
 
-    // Send push notification directly via FCM legacy API
+    // Trigger push notification via standalone backend
     try {
       final receiverDoc = await _firestore
           .collection(AppConstants.usersCollection)
           .doc(receiverId)
           .get();
+          
       if (receiverDoc.exists) {
         final receiver = UserModel.fromMap(receiverDoc.data()!);
         if (receiver.fcmToken != null && receiver.fcmToken!.isNotEmpty) {
@@ -189,22 +192,32 @@ class ChatRepository {
               .collection(AppConstants.usersCollection)
               .doc(senderId)
               .get();
+              
           final senderName = senderDoc.exists
               ? UserModel.fromMap(senderDoc.data()!).username
               : 'Someone';
           
           final messageBody = type == MessageType.image ? '📷 Image' : content;
 
-          await NotificationService().sendPushNotification(
-            receiverToken: receiver.fcmToken!,
-            title: senderName,
-            body: messageBody,
-            chatId: chatId,
+          // Replace with your actual backend URL once deployed (e.g., https://your-app.onrender.com/api/notifications/send)
+          // Change this line (around line 197) to use your new Render URL:
+final backendUrl = 'https://personal-chat-new.onrender.com/api/notifications/send';
+
+          
+          await http.post(
+            Uri.parse(backendUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'token': receiver.fcmToken,
+              'title': senderName,
+              'body': messageBody,
+              'chatId': chatId,
+            }),
           );
         }
       }
     } catch (e) {
-      print('Failed to send push notification: $e');
+      print('Failed to trigger push notification: $e');
     }
   }
 

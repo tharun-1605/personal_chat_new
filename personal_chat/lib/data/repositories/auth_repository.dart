@@ -98,7 +98,7 @@ class AuthRepository {
         .update({
           'lastSeen': DateTime.now().toIso8601String(),
           'isOnline': true,
-          'fcmToken': ?fcmToken,
+          'fcmToken': fcmToken,
         });
 
     final userDoc = await _firestore
@@ -140,7 +140,7 @@ class AuthRepository {
       'username': username,
       'usernameLowercase': username.toLowerCase(),
       'bio': bio,
-      'photoUrl': ?photoUrl,
+      if (photoUrl != null) 'photoUrl': photoUrl,
     };
 
     await _firestore
